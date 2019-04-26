@@ -686,7 +686,10 @@ sub cleanPath {
 sub locateSyncProfile
 {
     my ($directory) = @_;
-    $directory = abs_path($directory);
+    if ( !($OSNAME eq "cygwin") )
+    {
+	$directory = abs_path($directory);
+    }
     while (1) {
         my $file = $directory."/sync.profile";
         return $file if (-e $file);
