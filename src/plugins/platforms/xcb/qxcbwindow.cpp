@@ -1183,7 +1183,8 @@ void QXcbWindow::updateNetWmUserTime(xcb_timestamp_t timestamp)
                               -1, -1, 1, 1,
                               0,                               // border width
                               XCB_WINDOW_CLASS_INPUT_OUTPUT,   // window class
-                              m_visualId,                      // visual
+			      (window()->type() == Qt::ForeignWindow) 
+				? XCB_COPY_FROM_PARENT : m_visualId, // visual
                               0,                               // value mask
                               nullptr);                              // value list
             wid = m_netWmUserTimeWindow;
