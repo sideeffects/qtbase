@@ -1870,7 +1870,9 @@ void QXcbWindow::handleButtonPressEvent(int event_x, int event_y, int root_x, in
         QWindow *w = static_cast<QWindowPrivate *>(QObjectPrivate::get(window()))->eventReceiver();
         if (!(w->flags() & (Qt::WindowDoesNotAcceptFocus | Qt::BypassWindowManagerHint))
                 && w->type() != Qt::ToolTip
-                && w->type() != Qt::Popup) {
+                && w->type() != Qt::Popup
+                && (!w->property("sidefx::noActivateOnButtonPress").isValid()
+		    || !w->property("sidefx::noActivateOnButtonPress").toBool())) {
             w->requestActivate();
         }
     }
