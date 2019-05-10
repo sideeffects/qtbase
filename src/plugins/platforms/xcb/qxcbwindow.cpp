@@ -147,7 +147,9 @@ static inline bool isTransient(const QWindow *w)
            || w->type() == Qt::SplashScreen
            || w->type() == Qt::ToolTip
            || w->type() == Qt::Drawer
-           || w->type() == Qt::Popup;
+           || w->type() == Qt::Popup
+	   || (w->property("sidefx::transientWindow").isValid()
+		&& w->property("sidefx::transientWindow").toBool());
 }
 
 void QXcbWindow::setImageFormatForVisual(const xcb_visualtype_t *visual)
