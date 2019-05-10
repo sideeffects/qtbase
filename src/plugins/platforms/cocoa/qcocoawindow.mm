@@ -531,7 +531,11 @@ NSInteger QCocoaWindow::windowLevel(Qt::WindowFlags flags)
 
     NSInteger windowLevel = NSNormalWindowLevel;
 
-    if (type == Qt::Tool)
+    if (type == Qt::Tool
+	|| (QPlatformWindow::window()->property(
+		"sidefx::transientWindow").isValid()
+	    && QPlatformWindow::window()->property(
+		"sidefx::transientWindow").toBool()))
         windowLevel = NSFloatingWindowLevel;
     else if ((type & Qt::Popup) == Qt::Popup)
         windowLevel = NSPopUpMenuWindowLevel;
@@ -1888,7 +1892,13 @@ QCocoaNSWindow *QCocoaWindow::createNSWindow(bool shouldBePanel)
 
     if (shouldBePanel) {
         // Qt::Tool windows hide on app deactivation, unless Qt::WA_MacAlwaysShowToolWindow is set
-        nsWindow.hidesOnDeactivate = ((type & Qt::Tool) == Qt::Tool) && !alwaysShowToolWindow();
+        nsWindow.hidesOnDeactivate = (
+	    (type & Qt::Tool) == Qt::Tool
+		|| (QPlatformWindow::window()->property(
+			"sidefx::transientWindow").isValid()
+		    && QPlatformWindow::window()->property(
+			"sidefx::transientWindow").toBool())
+	    ) && !alwaysShowToolWindow();
 
         // Make popup windows show on the same desktop as the parent window
         nsWindow.collectionBehavior = NSWindowCollectionBehaviorFullScreenAuxiliary
