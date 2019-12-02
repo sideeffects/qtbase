@@ -1137,6 +1137,13 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
     msg.wParam = wParam;
     msg.lParam = lParam;
     msg.pt.x = msg.pt.y = 0;
+
+    // Assign the time of when the message was posted.
+    // GetMessageTime() returns the time of the last message retrieved by
+    // GetMessage()/PeekMessage() which should be the one that's passed into
+    // this function.
+    msg.time = GetMessageTime();
+
     if (et != QtWindows::CursorEvent && (et & (QtWindows::MouseEventFlag | QtWindows::NonClientEventFlag))) {
         msg.pt.x = GET_X_LPARAM(lParam);
         msg.pt.y = GET_Y_LPARAM(lParam);
