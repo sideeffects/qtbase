@@ -333,8 +333,10 @@ void QWidgetBackingStore::beginPaint(QRegion &toClean, QWidget *widget, QBacking
     Q_UNUSED(widget);
     Q_UNUSED(toCleanIsInTopLevelCoordinates);
 
+#if !defined(Q_OS_MAC)
     // Always flush repainted areas.
     dirtyOnScreen += toClean;
+#endif
 
 #ifdef QT_NO_PAINT_DEBUG
     backingStore->beginPaint(toClean);
@@ -714,7 +716,9 @@ void QWidgetBackingStore::markDirtyOnScreen(const QRegion &region, QWidget *widg
 
     // Top-level.
     if (widget == tlw) {
+#if !defined(Q_OS_MAC)
         if (!widget->testAttribute(Qt::WA_WState_InPaintEvent))
+#endif
             dirtyOnScreen += region;
         return;
     }
@@ -723,7 +727,9 @@ void QWidgetBackingStore::markDirtyOnScreen(const QRegion &region, QWidget *widg
     if (!hasPlatformWindow(widget) && !widget->isWindow()) {
         QWidget *nativeParent = widget->nativeParentWidget();        // Alien widgets with the top-level as the native parent (common case).
         if (nativeParent == tlw) {
+#if !defined(Q_OS_MAC)
             if (!widget->testAttribute(Qt::WA_WState_InPaintEvent))
+#endif
                 dirtyOnScreen += region.translated(topLevelOffset);
             return;
         }
