@@ -758,6 +758,59 @@ void QTreeView::showColumn(int column)
 void QTreeView::expand(const QModelIndex &index)
 {
     Q_D(QTreeView);
+
+    if (property("sidefx::treeViewExpandRecursively").toBool())
+    {
+	QVariant depth_prop =
+	    property("sidefx::treeViewExpandRecursivelyDepth");
+	int depth = depth_prop.isValid() ? depth_prop.toInt() : -1;
+
+	/*!
+	  \since 5.13
+	  Expands the item at the given \a index and all its children to the
+	  given \a depth. The \a depth is relative to the given \a index.
+	  A \a depth of -1 will expand all children, a \a depth of 0 will
+	  only expand the given \a index.
+
+	  \warning: if the model contains a large number of items,
+	  this function will take some time to execute.
+
+	  \sa expandAll()
+	*/
+	if (depth < -1)
+	    return;
+	// do layouting only once after expanding is done
+	d->doDelayedItemsLayout();
+	expand(index);
+	if (depth == 0)
+	    return;
+	QStack<QPair<QModelIndex, int>> parents;
+	parents.push({index, 0});
+	while (!parents.isEmpty()) {
+	    const QPair<QModelIndex, int> elem = parents.pop();
+	    const QModelIndex &parent = elem.first;
+	    const int curDepth = elem.second;
+	    const int rowCount = d->model->rowCount(parent);
+	    for (int row = 0; row < rowCount; ++row) {
+		const QModelIndex child = d->model->index(row, 0, parent);
+		if (!d->isIndexValid(child))
+		    break;
+		if (depth == -1 || curDepth + 1 < depth)
+		    parents.push({child, curDepth + 1});
+		if (d->isIndexExpanded(child))
+		    continue;
+		if (d->storeExpanded(child))
+		    emit expanded(child);
+	    }
+	}
+
+	return;
+    }
+
+    //
+    // Default expand() behavior.
+    //
+
     if (!d->isIndexValid(index))
         return;
     if (index.flags() & Qt::ItemNeverHasChildren)
