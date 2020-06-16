@@ -781,7 +781,15 @@ void QTreeView::expand(const QModelIndex &index)
 	    return;
 	// do layouting only once after expanding is done
 	d->doDelayedItemsLayout();
+
+	// To avoid infinite recursion.
+	setProperty("sidefx::treeViewExpandRecursively", false);
+
 	expand(index);
+
+	// Restore recursive expansion property.
+	setProperty("sidefx::treeViewExpandRecursively", true);
+
 	if (depth == 0)
 	    return;
 	QStack<QPair<QModelIndex, int>> parents;
