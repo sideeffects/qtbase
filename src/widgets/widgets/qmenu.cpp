@@ -2434,6 +2434,9 @@ void QMenuPrivate::popup(const QPoint &p, QAction *atAction, PositionFunction po
 
     const int desktopFrame = q->style()->pixelMetric(QStyle::PM_MenuDesktopFrameWidth, nullptr, q);
     bool adjustToDesktop = !q->window()->testAttribute(Qt::WA_DontShowOnScreen);
+    #if QT_CONFIG(graphicsview)
+    adjustToDesktop = adjustToDesktop && !isEmbedded;
+    #endif
 
     // if the screens have very different geometries and the menu is too big, we have to recalculate
     if ((size.height() > screen.height() || size.width() > screen.width()) ||
