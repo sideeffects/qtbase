@@ -821,6 +821,7 @@ void QListView::wheelEvent(QWheelEvent *e)
             QPoint angleDelta(e->angleDelta().y(), e->angleDelta().x());
             QWheelEvent hwe(e->position(), e->globalPosition(), pixelDelta, angleDelta,
                             e->buttons(), e->modifiers(), e->phase(), e->inverted(), e->source());
+	    hwe.setTimestamp(e->timestamp());
             if (e->spontaneous())
                 qt_sendSpontaneousEvent(d->hbar, &hwe);
             else
