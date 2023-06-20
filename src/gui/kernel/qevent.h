@@ -68,7 +68,7 @@ class QScreen;
 class Q_GUI_EXPORT QInputEvent : public QEvent
 {
 public:
-    explicit QInputEvent(Type type, Qt::KeyboardModifiers modifiers = Qt::NoModifier);
+    explicit QInputEvent(QEvent::Type type, Qt::KeyboardModifiers modifiers = Qt::NoModifier);
     ~QInputEvent();
     inline Qt::KeyboardModifiers modifiers() const { return modState; }
     inline void setModifiers(Qt::KeyboardModifiers amodifiers) { modState = amodifiers; }
@@ -104,15 +104,15 @@ protected:
 class Q_GUI_EXPORT QMouseEvent : public QInputEvent
 {
 public:
-    QMouseEvent(Type type, const QPointF &localPos, Qt::MouseButton button,
+    QMouseEvent(QEvent::Type type, const QPointF &localPos, Qt::MouseButton button,
                 Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);
-    QMouseEvent(Type type, const QPointF &localPos, const QPointF &screenPos,
+    QMouseEvent(QEvent::Type type, const QPointF &localPos, const QPointF &screenPos,
                 Qt::MouseButton button, Qt::MouseButtons buttons,
                 Qt::KeyboardModifiers modifiers);
-    QMouseEvent(Type type, const QPointF &localPos, const QPointF &windowPos, const QPointF &screenPos,
+    QMouseEvent(QEvent::Type type, const QPointF &localPos, const QPointF &windowPos, const QPointF &screenPos,
                 Qt::MouseButton button, Qt::MouseButtons buttons,
                 Qt::KeyboardModifiers modifiers);
-    QMouseEvent(Type type, const QPointF &localPos, const QPointF &windowPos, const QPointF &screenPos,
+    QMouseEvent(QEvent::Type type, const QPointF &localPos, const QPointF &windowPos, const QPointF &screenPos,
                 Qt::MouseButton button, Qt::MouseButtons buttons,
                 Qt::KeyboardModifiers modifiers, Qt::MouseEventSource source);
     ~QMouseEvent();
@@ -154,7 +154,7 @@ protected:
 class Q_GUI_EXPORT QHoverEvent : public QInputEvent
 {
 public:
-    QHoverEvent(Type type, const QPointF &pos, const QPointF &oldPos, Qt::KeyboardModifiers modifiers = Qt::NoModifier);
+    QHoverEvent(QEvent::Type type, const QPointF &pos, const QPointF &oldPos, Qt::KeyboardModifiers modifiers = Qt::NoModifier);
     ~QHoverEvent();
 
 #ifndef QT_NO_INTEGER_EVENT_COORDINATES
@@ -282,12 +282,12 @@ public:
 #if QT_DEPRECATED_SINCE(5, 15)
     // Actually deprecated since 5.4, in docs
     QT_DEPRECATED_VERSION_X_5_15("Use the other QTabletEvent constructor")
-    QTabletEvent(Type t, const QPointF &pos, const QPointF &globalPos,
+    QTabletEvent(QEvent::Type t, const QPointF &pos, const QPointF &globalPos,
                  int device, int pointerType, qreal pressure, int xTilt, int yTilt,
                  qreal tangentialPressure, qreal rotation, int z,
                  Qt::KeyboardModifiers keyState, qint64 uniqueID); // ### remove in Qt 6
 #endif
-    QTabletEvent(Type t, const QPointF &pos, const QPointF &globalPos,
+    QTabletEvent(QEvent::Type t, const QPointF &pos, const QPointF &globalPos,
                  int device, int pointerType, qreal pressure, int xTilt, int yTilt,
                  qreal tangentialPressure, qreal rotation, int z,
                  Qt::KeyboardModifiers keyState, qint64 uniqueID,
@@ -377,9 +377,9 @@ protected:
 class Q_GUI_EXPORT QKeyEvent : public QInputEvent
 {
 public:
-    QKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers, const QString& text = QString(),
+    QKeyEvent(QEvent::Type type, int key, Qt::KeyboardModifiers modifiers, const QString& text = QString(),
               bool autorep = false, ushort count = 1);
-    QKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers,
+    QKeyEvent(QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
               quint32 nativeScanCode, quint32 nativeVirtualKey, quint32 nativeModifiers,
               const QString &text = QString(), bool autorep = false, ushort count = 1);
     ~QKeyEvent();
@@ -399,7 +399,7 @@ public:
 
     // Functions for the extended key event information
 #if QT_DEPRECATED_SINCE(5, 0)
-    static inline QKeyEvent *createExtendedKeyEvent(Type type, int key, Qt::KeyboardModifiers modifiers,
+    static inline QKeyEvent *createExtendedKeyEvent(QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
                                              quint32 nativeScanCode, quint32 nativeVirtualKey,
                                              quint32 nativeModifiers,
                                              const QString& text = QString(), bool autorep = false,
@@ -428,7 +428,7 @@ protected:
 class Q_GUI_EXPORT QFocusEvent : public QEvent
 {
 public:
-    explicit QFocusEvent(Type type, Qt::FocusReason reason=Qt::OtherFocusReason);
+    explicit QFocusEvent(QEvent::Type type, Qt::FocusReason reason=Qt::OtherFocusReason);
     ~QFocusEvent();
 
     inline bool gotFocus() const { return type() == FocusIn; }
@@ -648,7 +648,7 @@ class Q_GUI_EXPORT QDropEvent : public QEvent
 {
 public:
     QDropEvent(const QPointF& pos, Qt::DropActions actions, const QMimeData *data,
-               Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers, Type type = Drop);
+               Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers, QEvent::Type type = QEvent::Drop);
     ~QDropEvent();
 
     inline QPoint pos() const { return p.toPoint(); }
@@ -682,7 +682,7 @@ class Q_GUI_EXPORT QDragMoveEvent : public QDropEvent
 {
 public:
     QDragMoveEvent(const QPoint &pos, Qt::DropActions actions, const QMimeData *data,
-                   Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers, Type type = DragMove);
+                   Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers, QEvent::Type type = QEvent::DragMove);
     ~QDragMoveEvent();
 
     inline QRect answerRect() const { return rect; }
@@ -719,7 +719,7 @@ public:
 class Q_GUI_EXPORT QHelpEvent : public QEvent
 {
 public:
-    QHelpEvent(Type type, const QPoint &pos, const QPoint &globalPos);
+    QHelpEvent(QEvent::Type type, const QPoint &pos, const QPoint &globalPos);
     ~QHelpEvent();
 
     inline int x() const { return p.x(); }
