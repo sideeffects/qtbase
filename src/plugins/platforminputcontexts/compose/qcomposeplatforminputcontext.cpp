@@ -92,9 +92,14 @@ void QComposeInputContext::ensureInitialized()
 
 bool QComposeInputContext::filterEvent(const QEvent *event)
 {
-    auto keyEvent = static_cast<const QKeyEvent *>(event);
-    if (keyEvent->type() != QEvent::KeyPress)
+    // SIDEFX
+    //  Slight tweak to not cast to QKeyEvent before checking the event type.
+    //  This was done before deciding to use QKeyEvent for our custom pre/post
+    //  key events, which can be passed to this method, but it remains a good
+    //  idea nevertheless.
+    if (event->type() != QEvent::KeyPress)
         return false;
+    auto keyEvent = static_cast<const QKeyEvent *>(event);
 
     if (!inputMethodAccepted())
         return false;

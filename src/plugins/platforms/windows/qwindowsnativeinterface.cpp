@@ -55,6 +55,7 @@
 #include <QtGui/qscreen.h>
 #include <qpa/qplatformscreen.h>
 #include <QtFontDatabaseSupport/private/qwindowsfontdatabase_p.h>
+#include <private/qguiapplication_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -300,6 +301,8 @@ QFunctionPointer QWindowsNativeInterface::platformFunction(const QByteArray &fun
         return QFunctionPointer(QWindowsNativeInterface::setWindowActivationBehavior);
     if (function == QWindowsWindowFunctions::isTabletModeIdentifier())
         return QFunctionPointer(QWindowsNativeInterface::isTabletMode);
+    if (function == QGuiApplicationPrivate::sidefxSetBracketKeyEventTypesIdentifier())
+        return QFunctionPointer(static_cast<QGuiApplication::sidefxSetBracketKeyEventTypesFunc>(QGuiApplicationPrivate::sidefxSetBracketKeyEventTypes));
     return nullptr;
 }
 
