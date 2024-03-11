@@ -106,6 +106,18 @@ public:
     QList<QInputMethodEvent::Attribute> attributes;
     bool needsSurroundingText;
     QLocale locale;
+    // SIDEFX
+    //  Extended no modifier key info stash required to be able to generate
+    //  the custom pre/post key events around key events.
+    //
+    //  sidefxNoModInfoFlag indicates whether the stash is valid.
+    bool sidefxNoModInfoFlag;
+    int sidefxNoModQtcode;
+    quint32 sidefxNoModModifiers;
+    quint32 sidefxNoModCode;
+    quint32 sidefxNoModSym;
+    quint32 sidefxNoModNativeModifiers;
+    QString sidefxNoModText;
 };
 
 
@@ -415,6 +427,35 @@ bool QIBusPlatformInputContext::filterEvent(const QEvent *event)
     if (!inputMethodAccepted())
         return false;
 
+    if (event->type() == QGuiApplicationPrivate::sidefxPreKeyEventType())
+    {
+        // Stash the info for the next QEvent::KeyPress or KeyRelease event.
+        const QKeyEvent *keyEvent = static_cast<const QKeyEvent *>(event);
+        d->sidefxNoModInfoFlag = true;
+        d->sidefxNoModQtcode = keyEvent->key();
+        d->sidefxNoModModifiers = keyEvent->modifiers();
+        d->sidefxNoModCode = keyEvent->nativeScanCode();
+        d->sidefxNoModSym = keyEvent->nativeVirtualKey();
+        d->sidefxNoModNativeModifiers = keyEvent->nativeModifiers();
+        d->sidefxNoModText = keyEvent->text();
+        return false;
+    }
+    else if (event->type() == QGuiApplicationPrivate::sidefxPostKeyEventType())
+    {
+        // Clear the stashed info as it no longer applies.
+        d->sidefxNoModInfoFlag = false;
+        d->sidefxNoModQtcode = 0;
+        d->sidefxNoModModifiers = 0;
+        d->sidefxNoModCode = 0;
+        d->sidefxNoModSym = 0;
+        d->sidefxNoModNativeModifiers = 0;
+        d->sidefxNoModText.clear();
+        return false;
+    }
+
+    if (event->type() != QEvent::KeyPress && event->type() != QEvent::KeyRelease)
+        return false;
+
     const QKeyEvent *keyEvent = static_cast<const QKeyEvent *>(event);
     quint32 sym = keyEvent->nativeVirtualKey();
     quint32 code = keyEvent->nativeScanCode();
@@ -461,6 +502,17 @@ bool QIBusPlatformInputContext::filterEvent(const QEvent *event)
     args << QVariant::fromValue(code) << QVariant::fromValue(sym) << QVariant::fromValue(state);
     args << QVariant::fromValue(keyEvent->text());
     args << QVariant::fromValue(keyEvent->isAutoRepeat());
+    // If we have stashed info that applies to this event's scan code, pass it
+    // along so the receiver can generate the custom pre/post key events.
+    if (d->sidefxNoModInfoFlag && d->sidefxNoModCode == code)
+    {
+        args << QVariant::fromValue(d->sidefxNoModQtcode);
+        args << QVariant::fromValue(d->sidefxNoModModifiers);
+        args << QVariant::fromValue(d->sidefxNoModCode);
+        args << QVariant::fromValue(d->sidefxNoModSym);
+        args << QVariant::fromValue(d->sidefxNoModNativeModifiers);
+        args << QVariant::fromValue(d->sidefxNoModText);
+    }
 
     QIBusFilterEventWatcher *watcher = new QIBusFilterEventWatcher(reply, this, QGuiApplication::focusWindow(), modifiers, args);
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, &QIBusPlatformInputContext::filterEventFinished);
@@ -497,6 +549,10 @@ void QIBusPlatformInputContext::filterEventFinished(QDBusPendingCallWatcher *cal
     const quint32 state = args.at(5).toUInt();
     const QString string = args.at(6).toString();
     const bool isAutoRepeat = args.at(7).toBool();
+    // SIDEFX
+    //  The start of the extended no modifier information in args.  Depends
+    //  on above code.
+    const int noModStart = 8;
 
     // copied from QXcbKeyboard::handleKeyEvent()
     bool filtered = reply.value();
@@ -512,9 +568,41 @@ void QIBusPlatformInputContext::filterEventFinished(QDBusPendingCallWatcher *cal
             QGuiApplicationPrivate::processWindowSystemEvent(&contextMenuEvent);
         }
 #endif
+        // Generate the custom preKeyEvent if we have the necessary data.
+        auto preKeyEventType = QGuiApplicationPrivate::sidefxPreKeyEventType();
+        if (preKeyEventType != QEvent::None && args.size() >= (noModStart+6)) {
+            const int noModQtcode = args.at(noModStart+0).toInt();
+            const Qt::KeyboardModifiers noModModifiers(args.at(noModStart+1).toUInt());
+            const quint32 noModCode = args.at(noModStart+2).toUInt();
+            const quint32 noModSym = args.at(noModStart+3).toUInt();
+            const quint32 noModNativeModifiers = args.at(noModStart+4).toUInt();
+            const QString noModString = args.at(noModStart+5).toString();
+            QWindowSystemInterfacePrivate::KeyEvent keyEvent(
+                    window, time, preKeyEventType, noModQtcode, noModModifiers,
+                    noModCode, noModSym, noModNativeModifiers, noModString,
+                    isAutoRepeat);
+            QGuiApplicationPrivate::processWindowSystemEvent(&keyEvent);
+        }
+
         QWindowSystemInterfacePrivate::KeyEvent keyEvent(window, time, type, qtcode, modifiers,
                                                          code, sym, state, string, isAutoRepeat);
         QGuiApplicationPrivate::processWindowSystemEvent(&keyEvent);
+
+        // Generate the custom postKeyEvent if we have the necessary data.
+        auto postKeyEventType = QGuiApplicationPrivate::sidefxPostKeyEventType();
+        if (postKeyEventType != QEvent::None && args.size() >= (noModStart+6)) {
+            const int noModQtcode = args.at(noModStart+0).toInt();
+            const Qt::KeyboardModifiers noModModifiers(args.at(noModStart+1).toUInt());
+            const quint32 noModCode = args.at(noModStart+2).toUInt();
+            const quint32 noModSym = args.at(noModStart+3).toUInt();
+            const quint32 noModNativeModifiers = args.at(noModStart+4).toUInt();
+            const QString noModString = args.at(noModStart+5).toString();
+            QWindowSystemInterfacePrivate::KeyEvent keyEvent(
+                    window, time, postKeyEventType, noModQtcode, noModModifiers,
+                    noModCode, noModSym, noModNativeModifiers, noModString,
+                    isAutoRepeat);
+            QGuiApplicationPrivate::processWindowSystemEvent(&keyEvent);
+        }
     }
     call->deleteLater();
 }
@@ -624,7 +712,8 @@ QIBusPlatformInputContextPrivate::QIBusPlatformInputContextPrivate()
       usePortal(shouldConnectIbusPortal()),
       valid(false),
       busConnected(false),
-      needsSurroundingText(false)
+      needsSurroundingText(false),
+      sidefxNoModInfoFlag(false)
 {
     if (usePortal) {
         valid = true;

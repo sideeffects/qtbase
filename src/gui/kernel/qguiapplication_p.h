@@ -326,6 +326,42 @@ public:
 
     static void updatePalette();
 
+    // SIDEFX
+    //  Token used by QGuiApplication::platformFunction() to return a pointer
+    //  to sidefxSetBracketKeyEventTypes().
+    static const QByteArray sidefxSetBracketKeyEventTypesIdentifier() { return QByteArrayLiteral("sidefxSetBracketKeyEventTypes"); }
+    // SIDEFX
+    //  The function returned by QGuiApplication::platformFunction() when given
+    //  a string that matches sidefxSetBracketKeyEventTypesIdentifier() on the
+    //  platforms supporting it.
+    //
+    //  It must match the QGuiApplication::sidefxSetBracketKeyEventTypesFunc
+    //  typedef.
+    //
+    //  It sets the custom QEvent::Type values for custom events that should
+    //  precede and follow key events.  These custom events are a mechanism
+    //  by which Qt can export extended information about the bracketed key
+    //  event.  In particular, we use them to let applications know how the
+    //  key event would be interpreted if modifiers were ignored.
+    //
+    //  The preEventType event precedes key events to which the extended info
+    //  applies, and the postEventType follows these key events as a flag that
+    //  the extended info from the preEventType no longer applies.  Typically
+    //  each individual key event is bracketed, though in certain situations a
+    //  pair of key events will be bracketed when the extended info applies to
+    //  both.
+    //
+    //  We reuse the QKeyEvent subclass for the preEventType and postEventType
+    //  events.
+    static void sidefxSetBracketKeyEventTypes(int preEventType, int postEventType);
+    // SIDEFX
+    //  Methods to query the event types to use for the custom bracket events
+    //  around key events by the Qt code that generates or checks for them.
+    //
+    //  The events are not generated when the type is QEvent::None.
+    static QEvent::Type sidefxPreKeyEventType();
+    static QEvent::Type sidefxPostKeyEventType();
+
 protected:
     virtual void notifyThemeChanged();
 
