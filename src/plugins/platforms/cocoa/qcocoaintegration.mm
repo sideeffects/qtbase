@@ -422,6 +422,13 @@ QList<int> QCocoaIntegration::possibleKeys(const QKeyEvent *event) const
     return mKeyboardMapper->possibleKeys(event);
 }
 
+QString QCocoaIntegration::sidefxLookupKeyString(
+                                unsigned short macVirtualKey,
+                                Qt::KeyboardModifiers modifiers)
+{
+    return mKeyboardMapper->sidefxLookupKeyString(macVirtualKey, modifiers);
+}
+
 void QCocoaIntegration::setToolbar(QWindow *window, NSToolbar *toolbar)
 {
     if (NSToolbar *prevToolbar = mToolbars.value(window))

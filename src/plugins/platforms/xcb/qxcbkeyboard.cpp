@@ -371,6 +371,15 @@ void QXcbKeyboard::updateKeymap()
     if (!connection()->hasXKB())
         keysymMods = keysymsToModifiers();
     updateModifiers(keysymMods);
+    // Masks for the modifiers we care about with m_sidefx_xkbStateNoModifiers.
+    // Right now this is the numlock modifier as it would be painful to account
+    // for it in the application without all the scaffolding we have here.
+    //
+    // Use m_sidefx_noModifiersRModMask when dealing with X key events and
+    // m_sidefx_noModifiersXKBModMask when updating the XKB keyboard state
+    // itself.
+    m_sidefx_noModifiersRModMask = 0;
+    m_sidefx_noModifiersXKBModMask = 0;
 
     m_config = true;
 
@@ -391,10 +400,58 @@ void QXcbKeyboard::updateKeymap()
                                                          core_device_id, XKB_KEYMAP_COMPILE_NO_FLAGS));
         if (m_xkbKeymap)
             m_xkbState.reset(xkb_x11_state_new_from_device(m_xkbKeymap.get(), xcb_connection(), core_device_id));
+        // Create the no modifier keyboard state object and copy layout/group
+        // indices and only the modifier(s) we care about from m_xkbState,
+        // which was initialized with the state of the device by the
+	// xkb_x11_state_new_from_device() call.
+        //
+        // We use a separate if statement here to avoid touching original code.
+        if (m_xkbKeymap)
+        {
+            // The "no modifier" keyboard state needs to track the state of the
+            // numlock modifier.
+            m_sidefx_noModifiersRModMask = rmod_masks.sidefx_numlock;
+
+            m_sidefx_xkbStateNoModifiers.reset(xkb_state_new(m_xkbKeymap.get()));
+            xkb_state_update_mask(m_sidefx_xkbStateNoModifiers.get(),
+                                  xkb_state_serialize_mods(
+                                      m_xkbState.get(),
+                                      XKB_STATE_MODS_DEPRESSED)
+                                          & m_sidefx_noModifiersXKBModMask,
+                                  xkb_state_serialize_mods(
+                                      m_xkbState.get(),
+                                      XKB_STATE_MODS_LATCHED)
+                                          & m_sidefx_noModifiersXKBModMask,
+                                  xkb_state_serialize_mods(
+                                      m_xkbState.get(),
+                                      XKB_STATE_MODS_LOCKED)
+                                          & m_sidefx_noModifiersXKBModMask,
+                                  xkb_state_serialize_layout(
+                                      m_xkbState.get(),
+                                      XKB_STATE_LAYOUT_DEPRESSED),
+                                  xkb_state_serialize_layout(
+                                      m_xkbState.get(),
+                                      XKB_STATE_LAYOUT_LATCHED),
+                                  xkb_state_serialize_layout(
+                                      m_xkbState.get(),
+                                      XKB_STATE_LAYOUT_LOCKED));
+        }
     } else {
         m_xkbKeymap.reset(keymapFromCore(keysymMods));
         if (m_xkbKeymap)
             m_xkbState.reset(xkb_state_new(m_xkbKeymap.get()));
+        // Create the no modifier keyboard state object.  In this case, there
+        // are no layout/group indices or modifiers to copy from m_xkbState.
+        //
+        // We use a separate if statement here to avoid touching original code.
+        if (m_xkbKeymap)
+        {
+            // The "no modifier" keyboard state needs to track the state of the
+            // numlock modifier.
+            m_sidefx_noModifiersRModMask = rmod_masks.sidefx_numlock;
+
+            m_sidefx_xkbStateNoModifiers.reset(xkb_state_new(m_xkbKeymap.get()));
+        }
     }
 
     if (!m_xkbKeymap) {
@@ -409,6 +466,8 @@ void QXcbKeyboard::updateKeymap()
     }
 
     updateXKBMods();
+    // NB: xkbModMask() must be called after updateXKBMods().
+    m_sidefx_noModifiersXKBModMask = xkbModMask(m_sidefx_noModifiersRModMask);
 
     QXkbCommon::verifyHasLatinLayout(m_xkbKeymap.get());
 }
@@ -431,6 +490,19 @@ void QXcbKeyboard::updateXKBState(xcb_xkb_state_notify_event_t *state)
                                   state->lockedGroup);
 
         handleStateChanges(changedComponents);
+
+        // Update the no modifier keyboard state object with the layout/group
+        // indices, and update only the modifier(s) we care about.
+        xkb_state_update_mask(m_sidefx_xkbStateNoModifiers.get(),
+                              state->baseMods
+                                  & m_sidefx_noModifiersXKBModMask,
+                              state->latchedMods
+                                  & m_sidefx_noModifiersXKBModMask,
+                              state->lockedMods
+                                  & m_sidefx_noModifiersXKBModMask,
+                              state->baseGroup,
+                              state->latchedGroup,
+                              state->lockedGroup);
     }
 }
 
@@ -458,6 +530,16 @@ void QXcbKeyboard::updateXKBStateFromCore(quint16 state)
                     xkbState, depressed, latched, locked, 0, 0, lockedGroup(state));
 
         handleStateChanges(changedComponents);
+
+        // Keep the no modifier keyboard state object synched with m_xkbState
+        // in terms of layout/group indices and only the modifier(s) we care
+        // about.
+        xkb_state_update_mask(
+                    m_sidefx_xkbStateNoModifiers.get(),
+                    depressed & m_sidefx_noModifiersXKBModMask,
+                    latched & m_sidefx_noModifiersXKBModMask,
+                    locked & m_sidefx_noModifiersXKBModMask,
+                    0, 0, lockedGroup(state));
     }
 }
 
@@ -476,6 +558,17 @@ void QXcbKeyboard::updateXKBStateFromXI(void *modInfo, void *groupInfo)
                                         group->locked);
 
         handleStateChanges(changedComponents);
+
+        // Keep the no modifier keyboard state object synched with m_xkbState
+        // in terms of layout/group indices and only the modifier(s) we care
+        // about.
+        xkb_state_update_mask(m_sidefx_xkbStateNoModifiers.get(),
+                              mods->base & m_sidefx_noModifiersXKBModMask,
+                              mods->latched & m_sidefx_noModifiersXKBModMask,
+                              mods->locked & m_sidefx_noModifiersXKBModMask,
+                              group->base,
+                              group->latched,
+                              group->locked);
     }
 }
 
@@ -646,6 +739,8 @@ void QXcbKeyboard::updateVModMapping()
             vmod_masks.super = bit;
         else if (qstrcmp(vmod_name, "Hyper") == 0)
             vmod_masks.hyper = bit;
+        else if (qstrcmp(vmod_name, "NumLock") == 0)
+            vmod_masks.sidefx_numlock = bit;
     }
 }
 
@@ -706,6 +801,8 @@ void QXcbKeyboard::updateVModToRModMapping()
             rmod_masks.super = modmap;
         else if (vmod_masks.hyper == bit)
             rmod_masks.hyper = modmap;
+        else if (vmod_masks.sidefx_numlock == bit)
+            rmod_masks.sidefx_numlock = modmap;
     }
 }
 
@@ -733,6 +830,7 @@ void QXcbKeyboard::updateModifiers(const KeysymModifierMap &keysymMods)
         applyModifier(&rmod_masks.super, keysymMods.value(XKB_KEY_Super_R,     -1));
         applyModifier(&rmod_masks.hyper, keysymMods.value(XKB_KEY_Hyper_L,     -1));
         applyModifier(&rmod_masks.hyper, keysymMods.value(XKB_KEY_Hyper_R,     -1));
+        applyModifier(&rmod_masks.sidefx_numlock, keysymMods.value(XKB_KEY_Num_Lock,     -1));
     }
 
     resolveMaskConflicts();
@@ -767,7 +865,7 @@ QXcbKeyboard::KeysymModifierMap QXcbKeyboard::keysymsToModifiers()
     // for Alt and Meta L and R are the same
     static const xcb_keysym_t symbols[] = {
         XKB_KEY_Alt_L, XKB_KEY_Meta_L, XKB_KEY_Mode_switch, XKB_KEY_Super_L, XKB_KEY_Super_R,
-        XKB_KEY_Hyper_L, XKB_KEY_Hyper_R
+        XKB_KEY_Hyper_L, XKB_KEY_Hyper_R, /*SIDEFX*/XKB_KEY_Num_Lock
     };
     static const size_t numSymbols = sizeof symbols / sizeof *symbols;
 
@@ -916,11 +1014,57 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
         });
     }
 
+    // Look up the no modifier equivalents (symbol, text, etc) using our
+    // no modifier keyboard state object.
+    struct xkb_state *noModXkbState = m_sidefx_xkbStateNoModifiers.get();
+
+    xcb_keysym_t noModSym = xkb_state_key_get_one_sym(noModXkbState, code);
+    QString noModText = QXkbCommon::lookupString(noModXkbState, code);
+
+    // Bits 0-7 of state are the modifier flags.  We keep only those we care
+    // about here.
+    quint16 noModEventState = ((state & 0xf0) |
+                               (state & m_sidefx_noModifiersRModMask));
+    Qt::KeyboardModifiers noModModifiers = translateModifiers(noModEventState);
+    if (QXkbCommon::isKeypad(noModSym))
+        noModModifiers |= Qt::KeypadModifier;
+
+    int noModQtcode = QXkbCommon::keysymToQtKey(noModSym, noModModifiers, noModXkbState, code, m_superAsMeta, m_hyperAsMeta);
+
+    // Yes, we include pointer button flags and group index in the native
+    // modifiers to match the regular key event.
+    quint32 noModNativeModifiers = noModEventState;
+
+    auto preKeyEventType = QGuiApplicationPrivate::sidefxPreKeyEventType();
+    auto postKeyEventType = QGuiApplicationPrivate::sidefxPostKeyEventType();
+
     bool filtered = false;
     if (auto inputContext = QGuiApplicationPrivate::platformIntegration()->inputContext()) {
+        // The input context may generate its own key events, so it may need to
+        // know about the no modifier extended info to generate its own custom
+        // key event bracket events.
+        //
+        // We pass it a custom preKeyEvent through its filterEvent() method for
+        // that purpose, not caring about the return value.
+        if (preKeyEventType != QEvent::None) {
+            QKeyEvent event(preKeyEventType, noModQtcode, noModModifiers, code, noModSym, noModNativeModifiers, noModText, m_isAutoRepeat, noModText.size());
+            event.setTimestamp(time);
+            inputContext->filterEvent(&event);
+        }
         QKeyEvent event(type, qtcode, modifiers, code, sym, state, text, m_isAutoRepeat, text.size());
         event.setTimestamp(time);
         filtered = inputContext->filterEvent(&event);
+        // The input context may generate its own key events, so it may need to
+        // know about the no modifier extended info to generate its own custom
+        // key event bracket events.
+        //
+        // We pass it a custom postKeyEvent through its filterEvent() method for
+        // that purpose, not caring about the return value.
+        if (postKeyEventType != QEvent::None) {
+            QKeyEvent event(postKeyEventType, noModQtcode, noModModifiers, code, noModSym, noModNativeModifiers, noModText, m_isAutoRepeat, noModText.size());
+            event.setTimestamp(time);
+            inputContext->filterEvent(&event);
+        }
     }
 
     if (!filtered) {
@@ -932,8 +1076,25 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
             QWindowSystemInterface::handleContextMenuEvent(window, false, pos, globalPos, modifiers);
         }
 #endif
+
+        // Generate the custom preKeyEvent.
+        if (preKeyEventType != QEvent::None) {
+            QWindowSystemInterface::handleExtendedKeyEvent(
+                window, time, preKeyEventType, noModQtcode, noModModifiers,
+                code, noModSym, noModNativeModifiers, noModText, m_isAutoRepeat,
+                /*count(default)*/ 1, /*tryShortcutOverride*/ false);
+        }
+
         QWindowSystemInterface::handleExtendedKeyEvent(window, time, type, qtcode, modifiers,
                                                        code, sym, state, text, m_isAutoRepeat);
+
+        // Generate the custom postKeyEvent.
+        if (postKeyEventType != QEvent::None) {
+            QWindowSystemInterface::handleExtendedKeyEvent(
+                window, time, postKeyEventType, noModQtcode, noModModifiers,
+                code, noModSym, noModNativeModifiers, noModText, m_isAutoRepeat,
+                /*count(default)*/ 1, /*tryShortcutOverride*/ false);
+        }
     }
 }
 

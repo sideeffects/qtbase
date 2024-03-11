@@ -151,6 +151,19 @@ public:
 
     static QFunctionPointer platformFunction(const QByteArray &function);
 
+    // SIDEFX
+    //  Signature to use for platformFunction("sidefxSetBracketKeyEventTypes").
+    //
+    //  A typedef does not introduce a new symbol for linkage purposes so this
+    //  provides a way for the application to cast the QFunctionPointer return
+    //  value of platformFunction() to the appropriate signature while still
+    //  being able to link to an unpatched version of the library without it.
+    //
+    //  The platformFunction() implementations also perform a static_cast to
+    //  this typedef for a compile time check that the function signature is
+    //  indeed a match.
+    typedef void (*sidefxSetBracketKeyEventTypesFunc)(int preEventType, int postEventType);
+
     static void setQuitOnLastWindowClosed(bool quit);
     static bool quitOnLastWindowClosed();
 

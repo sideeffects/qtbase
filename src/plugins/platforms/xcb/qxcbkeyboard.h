@@ -108,6 +108,7 @@ private:
         uint meta;
         uint super;
         uint hyper;
+        uint sidefx_numlock;
     };
 
     _mod_masks rmod_masks;
@@ -129,6 +130,17 @@ private:
     int core_device_id;
 
     QXkbCommon::ScopedXKBState m_xkbState;
+    // Special keyboard state object that excludes any modifiers changes we
+    // don't care about (almost all) and keeps layout/group indices in sync
+    // with m_xkbState.
+    QXkbCommon::ScopedXKBState m_sidefx_xkbStateNoModifiers;
+    // Masks for the modifiers we care about with m_sidefx_xkbStateNoModifiers.
+    //
+    // Use m_sidefx_noModifiersRModMask when dealing with X key events and
+    // m_sidefx_noModifiersXKBModMask when updating the XKB keyboard state
+    // itself.
+    quint16 m_sidefx_noModifiersRModMask;
+    xkb_mod_mask_t m_sidefx_noModifiersXKBModMask;
     QXkbCommon::ScopedXKBKeymap m_xkbKeymap;
     QXkbCommon::ScopedXKBContext m_xkbContext;
 

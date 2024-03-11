@@ -109,6 +109,31 @@ private:
     QChar m_lastHighSurrogate;
     static const size_t NumKeyboardLayoutItems = 256;
     KeyboardLayoutItem keyLayout[NumKeyboardLayoutItems];
+    // SIDEFX
+    //  ToUnicode(), which we need to use to translate the virtual-key code,
+    //  also changes the state of the kernel-mode keyboard buffer.
+    //
+    //  From the documentation for ToUnicodeEx:
+    //    This state-change affects dead keys, ligatures, alt+numpad key entry,
+    //    and so on.  It might also cause undesired side-effects if used in
+    //    conjunction with TranslateMessage (which also changes the state of
+    //    the kernel-mode keyboard buffer).
+    //
+    //  The updatePossibleKeyCodes() method already calls ToUnicode() to update
+    //  keyLayout, and has a hack to correct this internal state change.  We
+    //  therefore avoid any additional ToUnicode() calls outside of that method
+    //  and instead cache the unicode result here.
+    //
+    //  We use a sidecar struct to avoid touching KeyboardLayoutItem itself,
+    //  partially because the keyLayout array is initialized by memset(), but
+    //  also because KeyboardLayoutItem is not explicitly private.
+    //
+    //  The exists and dirty flags from the KeyboardLayoutItem apply to these
+    //  sidecar extras as well.
+    struct sidefx_KeyboardLayoutItemExtras {
+        QString noModUnicode;
+    };
+    sidefx_KeyboardLayoutItemExtras sidefx_keyLayoutExtras[NumKeyboardLayoutItems];
     bool m_detectAltGrModifier =  false;
     bool m_seenAltGr = false;
 

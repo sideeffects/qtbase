@@ -468,4 +468,37 @@ QList<int> QCocoaKeyMapper::possibleKeys(const QKeyEvent *event) const
     return ret;
 }
 
+// SIDEFX
+//  Utility method for coverting a virtual key code and a set of modifiers
+//  into a string of unicode characters.
+//
+//  This is used as a fallback for OSX versions prior to 10.15, and could
+//  probably be made more efficient.
+QString QCocoaKeyMapper::sidefxLookupKeyString(unsigned short macVirtualKey,
+                                               Qt::KeyboardModifiers modifiers)
+{
+    // This call will only update the layout info if it detects a change in
+    // the input source, but when it does, it also calls deleteLayouts() to
+    // clear out a 256 entry cache maintained for the possibleKeys() method.
+    // This deleteLayouts() call is a loop through a 256 entry table, doing
+    // nothing in the best case.
+    updateKeyboard();
+
+    // UCKeyTranslate can return a buffer of up to 255 characters, though it
+    // would be rare to get more than 4.
+    UniCharCount buffer_size = 255;
+    UniChar buffer[255];
+    UniCharCount out_buffer_size = 0;
+
+    const UInt32 keyModifier = ((qt_mac_get_mac_modifiers(modifiers) >> 8) & 0xFF);
+    UInt32 dummy_keyboard_dead = 0;
+    OSStatus err = UCKeyTranslate(keyboard_layout_format, macVirtualKey, kUCKeyActionDown, keyModifier,
+                                      keyboard_kind, 0, &dummy_keyboard_dead, buffer_size, &out_buffer_size, buffer);
+    if (err == noErr && out_buffer_size) {
+        return QString::fromUtf16(buffer, out_buffer_size);
+    }
+
+    return QString();
+}
+
 QT_END_NAMESPACE

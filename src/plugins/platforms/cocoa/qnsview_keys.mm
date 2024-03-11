@@ -110,6 +110,45 @@
     if (!(modifiers & (Qt::ControlModifier | Qt::MetaModifier)) && (ch.unicode() < 0xf700 || ch.unicode() > 0xf8ff))
         text = QString::fromNSString(characters);
 
+    // Prepare the no modifier info for the custom SIDEFX pre/post key events.
+    ulong noModNativeModifiers = 0;
+    Qt::KeyboardModifiers noModModifiers = Qt::NoModifier;
+    if (nativeModifiers & NSEventModifierFlagNumericPad) {
+        noModNativeModifiers |= NSEventModifierFlagNumericPad;
+        noModModifiers |= Qt::KeypadModifier;
+    }
+    QChar noModCh = QChar::ReplacementCharacter;
+    int noModKeyCode = Qt::Key_unknown;
+
+    // charactersIgnoringModifiers is misnamed as it does not ignore shift, so
+    // that is not useful for us.  From OSX 10.15+, NSEvent has a method we can
+    // use, charactersByApplyingModifiers(), but for older versions, the lookup
+    // is trickier.
+#if defined(MAC_OS_X_VERSION_10_15) && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_15
+    NSEventModifierFlags noModQueryModifiers = NSEventModifierFlags(0);
+    NSString *charactersIgnoringAllModifiers = [nsevent charactersByApplyingModifiers:noModQueryModifiers];
+    if ([charactersIgnoringAllModifiers length] != 0) {
+        noModCh = QChar([charactersIgnoringAllModifiers characterAtIndex:0]);
+	noModKeyCode = [self convertKeyCode:noModCh];
+    }
+    QString noModText;
+    // This condition copied from check with ch earlier in this method.  See
+    // the comment there for details.
+    if (noModCh.unicode() < 0xf700 || noModCh.unicode() > 0xf8ff)
+        noModText = QString::fromNSString(charactersIgnoringAllModifiers);
+#else // !defined(MAC_OS_X_VERSION_10_15) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_15
+    QString charactersIgnoringAllModifiers = QCocoaIntegration::instance()->sidefxLookupKeyString(nativeVirtualKey, Qt::NoModifier);
+    if (charactersIgnoringAllModifiers.length() != 0) {
+        noModCh = charactersIgnoringAllModifiers.at(0);
+	noModKeyCode = [self convertKeyCode:noModCh];
+    }
+    QString noModText;
+    // This condition copied from check with ch earlier in this method.  See
+    // the comment there for details.
+    if (noModCh.unicode() < 0xf700 || noModCh.unicode() > 0xf8ff)
+        noModText = charactersIgnoringAllModifiers;
+#endif
+
     QWindow *window = [self topLevelWindow];
 
     // Popups implicitly grab key events; forward to the active popup if there is one.
@@ -150,9 +189,27 @@
 
     bool accepted = true;
     if (m_sendKeyEvent && m_composingText.isEmpty()) {
+        auto preKeyEventType = QGuiApplicationPrivate::sidefxPreKeyEventType();
+        auto postKeyEventType = QGuiApplicationPrivate::sidefxPostKeyEventType();
+        // Generate the custom preKeyEvent.
+        if (preKeyEventType != QEvent::None) {
+            QWindowSystemInterface::handleExtendedKeyEvent(
+                window, timestamp, preKeyEventType, noModKeyCode, noModModifiers,
+                nativeScanCode, nativeVirtualKey, noModNativeModifiers, noModText,
+                [nsevent isARepeat], 1, false);
+        }
+
         QWindowSystemInterface::handleExtendedKeyEvent(window, timestamp, QEvent::Type(eventType), keyCode, modifiers,
                                                        nativeScanCode, nativeVirtualKey, nativeModifiers, text, [nsevent isARepeat], 1, false);
         accepted = QWindowSystemInterface::flushWindowSystemEvents();
+
+        // Generate the custom postKeyEvent.
+        if (postKeyEventType != QEvent::None) {
+            QWindowSystemInterface::handleExtendedKeyEvent(
+                window, timestamp, postKeyEventType, noModKeyCode, noModModifiers,
+                nativeScanCode, nativeVirtualKey, noModNativeModifiers, noModText,
+                [nsevent isARepeat], 1, false);
+        }
     }
     m_sendKeyEvent = false;
     m_resendKeyEvent = false;

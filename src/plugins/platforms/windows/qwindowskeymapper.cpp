@@ -99,6 +99,9 @@ QWindowsKeyMapper::QWindowsKeyMapper()
     : m_useRTLExtensions(false), m_keyGrabber(nullptr)
 {
     memset(keyLayout, 0, sizeof(keyLayout));
+    // SIDEFX
+    //  sidefx_keyLayoutExtras array elements are initialized by the element
+    //  constructor.
     auto *app = static_cast<QGuiApplication *>(QGuiApplication::instance());
     QObject::connect(app, &QGuiApplication::applicationStateChanged,
                      app, clearKeyRecorderOnApplicationInActive);
@@ -129,13 +132,18 @@ enum { scancodeBitmask = 0x1ff };
 
 // Key recorder ------------------------------------------------------------------------[ start ] --
 struct KeyRecord {
-    KeyRecord(int c, int a, int s, const QString &t) : code(c), ascii(a), state(s), text(t) {}
+    KeyRecord(int c, int a, int s, const QString &t, int noModA, const QString &noModT) : code(c), ascii(a), state(s), text(t), noModAscii(noModA), noModText(noModT) {}
     KeyRecord() {}
 
     int code;
     int ascii;
     int state;
     QString text;
+    // SIDEFX
+    //  Extended no modifier info required to be able to generate the custom
+    //  pre/post key events around key events.
+    int noModAscii;
+    QString noModText;
 };
 
 // We need to record the pressed keys in order to decide, whether the key event is an autorepeat
@@ -144,7 +152,8 @@ static const int QT_MAX_KEY_RECORDINGS = 64; // User has LOTS of fingers...
 struct KeyRecorder
 {
     inline KeyRecord *findKey(int code, bool remove);
-    inline void storeKey(int code, int ascii, int state, const QString& text);
+    inline void storeKey(int code, int ascii, int state, const QString& text,
+                         int noModAscii, const QString &noModText);
     inline void clearKeys();
 
     int nrecs = 0;
@@ -182,7 +191,8 @@ KeyRecord *KeyRecorder::findKey(int code, bool remove)
     return result;
 }
 
-void KeyRecorder::storeKey(int code, int ascii, int state, const QString& text)
+void KeyRecorder::storeKey(int code, int ascii, int state, const QString& text,
+                           int noModAscii, const QString &noModText)
 {
     Q_ASSERT_X(nrecs != QT_MAX_KEY_RECORDINGS,
                "Internal KeyRecorder",
@@ -192,7 +202,7 @@ void KeyRecorder::storeKey(int code, int ascii, int state, const QString& text)
         qWarning("Qt: Internal keyboard buffer overflow");
         return;
     }
-    records[nrecs++] = KeyRecord(code,ascii,state,text);
+    records[nrecs++] = KeyRecord(code,ascii,state,text,noModAscii,noModText);
 }
 
 void KeyRecorder::clearKeys()
@@ -604,7 +614,7 @@ inline quint32 winceKeyBend(quint32 keyCode)
 }
 
 // Translate a VK into a Qt key code, or unicode character
-static inline quint32 toKeyOrUnicode(quint32 vk, quint32 scancode, unsigned char *kbdBuffer, bool *isDeadkey = nullptr)
+static inline quint32 toKeyOrUnicode(quint32 vk, quint32 scancode, unsigned char *kbdBuffer, bool *isDeadkey = nullptr, QString *sidefxUnicodeOut = nullptr)
 {
     Q_ASSERT(vk > 0 && vk < 256);
     quint32 code = 0;
@@ -620,6 +630,14 @@ static inline quint32 toKeyOrUnicode(quint32 vk, quint32 scancode, unsigned char
     }
     if (res)
         code = unicodeBuffer[0].toUpper().unicode();
+    // Stash the unicode characters from the buffer when given an argument for
+    // that purpose.
+    if (sidefxUnicodeOut) {
+        if (res > 0)
+            *sidefxUnicodeOut = QString(unicodeBuffer, res);
+        else
+            sidefxUnicodeOut->clear();
+    }
 
     // Qt::Key_*'s are not encoded below 0x20, so try again, and DEL keys (0x7f) is encoded with a
     // proper Qt::Key_ code
@@ -727,7 +745,11 @@ void QWindowsKeyMapper::updatePossibleKeyCodes(unsigned char *kbdBuffer, quint32
     keyLayout[vk_key].dirty = false;
     keyLayout[vk_key].exists = true;
     setKbdState(buffer, false, false, false);
-    keyLayout[vk_key].qtKey[0] = toKeyOrUnicode(vk_key, scancode, buffer, &isDeadKey);
+    // SIDEFX
+    //  We stash the unicode obtained from ToUnicode() in the extras sidecar
+    //  element for the no modifier case to avoid having to introduce more
+    //  ToUnicode() calls (and the problems they bring) later.
+    keyLayout[vk_key].qtKey[0] = toKeyOrUnicode(vk_key, scancode, buffer, &isDeadKey, &sidefx_keyLayoutExtras[vk_key].noModUnicode);
     keyLayout[vk_key].deadkeys |= isDeadKey ? 0x01 : 0;
     setKbdState(buffer, true, false, false);
     keyLayout[vk_key].qtKey[1] = toKeyOrUnicode(vk_key, scancode, buffer, &isDeadKey);
@@ -1126,6 +1148,27 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
         }
     }
 
+    int noModModifiersIndex = 0;
+
+    int noModCode = keyLayout[vk_key].qtKey[noModModifiersIndex];
+
+    // This condition copied from check with code earlier in this method.
+    //
+    // If the bit 24 of lParm is set you received a enter,
+    // otherwise a Return. (This is the extended key bit)
+    if ((noModCode == Qt::Key_Return) && (msg.lParam & 0x1000000))
+        noModCode = Qt::Key_Enter;
+    else if (altGr)
+        noModCode = Qt::Key_AltGr;
+
+    quint32 noModNModifiers = 0;
+    int noModState = 0;
+    if (state & Qt::KeypadModifier)
+        noModState |= Qt::KeypadModifier;
+
+    auto preKeyEventType = QGuiApplicationPrivate::sidefxPreKeyEventType();
+    auto postKeyEventType = QGuiApplicationPrivate::sidefxPostKeyEventType();
+
     // KEYDOWN ---------------------------------------------------------------------------------
     if (msgType == WM_KEYDOWN || msgType == WM_IME_KEYDOWN || msgType == WM_SYSKEYDOWN) {
         // Get the last record of this key press, so we can validate the current state
@@ -1147,6 +1190,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
                          : msgType == WM_IME_KEYDOWN ? WM_IME_CHAR : WM_SYSCHAR);
 
         QChar uch;
+	QChar noModUCh;
         if (PeekMessage(&wm_char, nullptr, charType, charType, PM_REMOVE)) {
             if (QWindowsContext::filterNativeEvent(&wm_char, lResult))
                 return true;
@@ -1174,17 +1218,26 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
                 uch = uch.toLower(); // (See doc of WM_SYSCHAR) Alt-letter
             if (!code && !uch.row())
                 code = asciiToKeycode(char(uch.cell()), state);
+            // SIDEFX
+	    //  We can do nothing with the messages from TranslateMessage()
+	    //  for the purposes of determining the unmodified extra info.
         }
 
         // Special handling for the WM_IME_KEYDOWN message. Microsoft IME (Korean) will not
         // generate a WM_IME_CHAR message corresponding to this message. We might get wrong
         // results, if we map this virtual key-code directly (for eg '?' US layouts). So try
         // to find the correct key using the current message parameters & keyboard state.
-        if (uch.isNull() && msgType == WM_IME_KEYDOWN) {
+        if ((uch.isNull() || noModUCh.isNull()) && msgType == WM_IME_KEYDOWN) {
             const auto *windowsInputContext =
                 qobject_cast<const QWindowsInputContext *>(QWindowsIntegration::instance()->inputContext());
             if (!(windowsInputContext && windowsInputContext->isComposing()))
                 vk_key = ImmGetVirtualKey(reinterpret_cast<HWND>(window->winId()));
+            // SIDEFX
+            //  We keep the indent level of these original statements unchanged
+            //  to make it clear in the patch file that they are original code.
+            //  For the noModUCh.isNull() case, which will always be true here,
+            //  we're solely after the update to vk_key above.
+            if (uch.isNull()) {
             BYTE keyState[256];
             wchar_t newKey[3] = {0};
             GetKeyboardState(keyState);
@@ -1195,6 +1248,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
                 // If we are still not able to find a unicode key, pass the WM_IME_KEYDOWN
                 // message to DefWindowProc() for generating a proper WM_KEYDOWN.
                 return false;
+            }
             }
         }
 
@@ -1212,6 +1266,30 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
             }
             if (!code && !uch.row())
                 code = asciiToKeycode(char(uch.cell()), state);
+        }
+        // Deduce no modifier character from the ?_KEYDOWN parameters.  Note
+        // that noModUCh has not yet been set, so this condition will always
+        // be true here, but the if statement conveniently wraps the new code
+        // for setting it.  This is independent of whether a ?_CHAR was found
+        // noModUCh is set yet is independent of whether a ?_CHAR was found in
+        // the queue.  Messages from TranslateMessage() are useless for the
+        // purposes of determining the unmodified extra info.
+        //
+        // The VK_DELETE code is a copy of the regular uch case immediately
+        // above, but otherwise we use the first character of the cached
+        // ToUnicode() string stored in sidefx_KeyboardLayoutItemExtras for
+        // this virtual-key code.  We cannot use MapVirtualKey() to map the
+        // virtual-key code to the character value as that function always
+        // returns uppercase letters.
+        if (noModUCh.isNull()) {
+            if (msg.wParam == VK_DELETE) {
+                noModUCh = QChar(QLatin1Char(0x7f)); // Windows doesn't know this one.
+            } else {
+                if (!sidefx_keyLayoutExtras[vk_key].noModUnicode.isEmpty())
+                    noModUCh = sidefx_keyLayoutExtras[vk_key].noModUnicode.at(0);
+            }
+            if (!noModCode && !noModUCh.row())
+                noModCode = asciiToKeycode(char(noModUCh.cell()), noModState);
         }
 
         // Special handling of global Windows hotkeys
@@ -1239,10 +1317,20 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
         // so, we have an auto-repeating key
         if (rec) {
             if (code < Qt::Key_Shift || code > Qt::Key_ScrollLock) {
+                // Generate the custom preKeyEvent.
+                if (preKeyEventType != QEvent::None) {
+                    QWindowSystemInterface::handleExtendedKeyEvent(receiver, preKeyEventType, noModCode,
+                                                                   Qt::KeyboardModifier(noModState), scancode, quint32(msg.wParam), noModNModifiers, rec->text, true);
+                }
                 QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyRelease, code,
                                                                Qt::KeyboardModifier(state), scancode, quint32(msg.wParam), nModifiers, rec->text, true);
                 QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyPress, code,
                                                                Qt::KeyboardModifier(state), scancode, quint32(msg.wParam), nModifiers, rec->text, true);
+                // Generate the custom postKeyEvent.
+                if (postKeyEventType != QEvent::None) {
+                    QWindowSystemInterface::handleExtendedKeyEvent(receiver, postKeyEventType, noModCode,
+                                                                   Qt::KeyboardModifier(noModState), scancode, quint32(msg.wParam), noModNModifiers, rec->text, true);
+                }
                 result = true;
             }
         }
@@ -1252,6 +1340,9 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
             const QString text = uch.isNull() ? QString() : QString(uch);
             const char a = uch.row() ? char(0) : char(uch.cell());
             const Qt::KeyboardModifiers modifiers(state);
+            const QString noModText = noModUCh.isNull() ? QString() : QString(noModUCh);
+            const char noModA = noModUCh.row() ? char(0) : char(noModUCh.cell());
+            const Qt::KeyboardModifiers noModModifiers(noModState);
 #ifndef QT_NO_SHORTCUT
             // Is Qt interested in the context menu key?
             if (modifiers == Qt::SHIFT && code == Qt::Key_F10
@@ -1259,16 +1350,28 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
                 return false;
             }
 #endif // !QT_NO_SHORTCUT
-            key_recorder.storeKey(int(msg.wParam), a, state, text);
+            key_recorder.storeKey(int(msg.wParam), a, state, text, noModA, noModText);
 
             // QTBUG-71210
             // VK_PACKET specifies multiple characters. The system only sends the first
             // character of this sequence for each.
             if (msg.wParam == VK_PACKET)
                 code = asciiToKeycode(char(uch.cell()), state);
+            if (msg.wParam == VK_PACKET)
+                noModCode = asciiToKeycode(char(noModUCh.cell()), noModState);
 
+            // Generate the custom preKeyEvent.
+            if (preKeyEventType != QEvent::None) {
+                QWindowSystemInterface::handleExtendedKeyEvent(receiver, preKeyEventType, noModCode,
+                                                               noModModifiers, scancode, quint32(msg.wParam), noModNModifiers, noModText, false);
+            }
             QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyPress, code,
                                                            modifiers, scancode, quint32(msg.wParam), nModifiers, text, false);
+            // Generate the custom postKeyEvent.
+            if (postKeyEventType != QEvent::None) {
+                QWindowSystemInterface::handleExtendedKeyEvent(receiver, postKeyEventType, noModCode,
+                                                               noModModifiers, scancode, quint32(msg.wParam), noModNModifiers, noModText, false);
+            }
             result =true;
             bool store = true;
             // Alt+<alphanumerical> go to the Win32 menu system if unhandled by Qt
@@ -1324,10 +1427,28 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
             // Map SHIFT + Tab to SHIFT + BackTab, QShortcutMap knows about this translation
             if (code == Qt::Key_Tab && (state & Qt::ShiftModifier) == Qt::ShiftModifier)
                 code = Qt::Key_Backtab;
+            // We've added extended no modifier key info to the record that can
+            // be used here to get the no modifier Qt key code.
+            if (!noModCode)
+                noModCode = asciiToKeycode((rec && rec->noModAscii) ? char(rec->noModAscii) : char(msg.wParam), noModState);
+            // Generate the custom preKeyEvent.
+            if (preKeyEventType != QEvent::None) {
+                QWindowSystemInterface::handleExtendedKeyEvent(receiver, preKeyEventType, noModCode,
+                                                               Qt::KeyboardModifier(noModState), scancode, quint32(msg.wParam),
+                                                               noModNModifiers,
+                                                               (rec ? rec->noModText : QString()), false);
+            }
             QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyRelease, code,
                                                            Qt::KeyboardModifier(state), scancode, quint32(msg.wParam),
                                                            nModifiers,
                                                            (rec ? rec->text : QString()), false);
+            // Generate the custom postKeyEvent.
+            if (postKeyEventType != QEvent::None) {
+                QWindowSystemInterface::handleExtendedKeyEvent(receiver, postKeyEventType, noModCode,
+                                                               Qt::KeyboardModifier(noModState), scancode, quint32(msg.wParam),
+                                                               noModNModifiers,
+                                                               (rec ? rec->noModText : QString()), false);
+            }
             result = true;
             // don't pass Alt to Windows unless we are embedded in a non-Qt window
             if (code == Qt::Key_Alt) {

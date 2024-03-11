@@ -88,6 +88,15 @@ public:
     void updateKeyMap(unsigned short macVirtualKey, QChar unicodeKey);
     void clearMappings();
 
+    // SIDEFX
+    //  Utility method for coverting a virtual key code and a set of modifiers
+    //  into a string of unicode characters.
+    //
+    //  This is used as a fallback for OSX versions prior to 10.15, and could
+    //  probably be made more efficient.
+    QString sidefxLookupKeyString(unsigned short macVirtualKey,
+                                  Qt::KeyboardModifiers modifiers);
+
 private:
     QCFType<TISInputSourceRef> currentInputSource = nullptr;
 

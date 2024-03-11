@@ -74,6 +74,7 @@
 #if QT_CONFIG(vulkan)
 #include <MoltenVK/mvk_vulkan.h>
 #endif
+#include <private/qguiapplication_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -238,6 +239,9 @@ QFunctionPointer QCocoaNativeInterface::platformFunction(const QByteArray &funct
 {
     if (function == QCocoaWindowFunctions::bottomLeftClippedByNSWindowOffsetIdentifier())
         return QFunctionPointer(QCocoaWindowFunctions::BottomLeftClippedByNSWindowOffset(QCocoaWindow::bottomLeftClippedByNSWindowOffsetStatic));
+
+    if (function == QGuiApplicationPrivate::sidefxSetBracketKeyEventTypesIdentifier())
+        return QFunctionPointer(static_cast<QGuiApplication::sidefxSetBracketKeyEventTypesFunc>(QGuiApplicationPrivate::sidefxSetBracketKeyEventTypes));
 
     return nullptr;
 }

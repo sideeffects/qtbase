@@ -332,6 +332,9 @@ QFunctionPointer QXcbNativeInterface::platformFunction(const QByteArray &functio
     if (function == QXcbScreenFunctions::virtualDesktopNumberIdentifier())
         return QFunctionPointer(QXcbScreenFunctions::VirtualDesktopNumber(reinterpret_cast<void *>(QXcbScreen::virtualDesktopNumberStatic)));
 
+    if (function == QGuiApplicationPrivate::sidefxSetBracketKeyEventTypesIdentifier())
+        return QFunctionPointer(static_cast<QGuiApplication::sidefxSetBracketKeyEventTypesFunc>(QGuiApplicationPrivate::sidefxSetBracketKeyEventTypes));
+
     return nullptr;
 }
 
