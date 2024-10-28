@@ -2352,6 +2352,7 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
         processMouseEvent(e); // the original mouse event
         return;
     }
+#if !defined(Q_OS_MACOS)
     if (type == QEvent::MouseMove && !positionChanged) {
         // On Windows, and possibly other platforms, a touchpad can send a mouse move
         // that does not change position, between a press and a release. This may
@@ -2359,6 +2360,7 @@ void QGuiApplicationPrivate::processMouseEvent(QWindowSystemInterfacePrivate::Mo
         // consistent behavior among platforms.
         return;
     }
+#endif
 
     modifier_buttons = e->modifiers;
     QPointF localPoint = e->localPos;
