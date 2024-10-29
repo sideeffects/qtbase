@@ -4106,8 +4106,12 @@ void QStyleSheetStyle::drawControl(ControlElement ce, const QStyleOption *opt, Q
           else
               v1Copy = *header;
             QRenderRule subRule = renderRule(w, opt, PseudoElement_HeaderViewSection);
-            if (hasStyleRule(w, PseudoElement_HeaderViewUpArrow)
-             || hasStyleRule(w, PseudoElement_HeaderViewDownArrow)) {
+            if ((hasStyleRule(w, PseudoElement_HeaderViewUpArrow)
+             || hasStyleRule(w, PseudoElement_HeaderViewDownArrow))
+	     && (hdr.orientation == Qt::Horizontal 
+		    && hdr.textAlignment & Qt::AlignRight
+		|| hdr.orientation == Qt::Vertical
+		    && hdr.textAlignment & Qt::AlignBottom)) {
                 const QRect arrowRect = subElementRect(SE_HeaderArrow, opt, w);
                 if (hdr.orientation == Qt::Horizontal)
                     hdr.rect.setWidth(hdr.rect.width() - arrowRect.width());
