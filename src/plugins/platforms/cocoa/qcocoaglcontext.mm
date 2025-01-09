@@ -121,6 +121,11 @@ NSOpenGLPixelFormat *QCocoaGLContext::pixelFormatForSurfaceFormat(const QSurface
 {
     QVector<NSOpenGLPixelFormatAttribute> attrs;
 
+    // SideFX.
+    // Prevent the software renderer from being returned if no GPU in the
+    // system supports below extension.
+    attrs << NSOpenGLPFAAccelerated;
+
     attrs << NSOpenGLPFAOpenGLProfile;
     if (format.profile() == QSurfaceFormat::CoreProfile) {
         if (format.version() >= qMakePair(4, 1))
@@ -186,8 +191,36 @@ NSOpenGLPixelFormat *QCocoaGLContext::pixelFormatForSurfaceFormat(const QSurface
         attrs << NSOpenGLPFARendererID << kCGLRendererGenericFloatID;
     }
 
+    // SideFX.
+    // Request floating point representation.
+    attrs << NSOpenGLPFAColorFloat;
+
+    // SideFX.
+    // Request 128 max texture samplers instead of default of 16
+    // (GL_MAX_TEXTURE_IMAGE_UNITS).
+    // THIS ATTRIBUTE MUST BE LISTED LAST.
+    attrs << 400;
+
     attrs << 0; // 0-terminate array
-    return [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs.constData()];
+
+
+    NSOpenGLPixelFormat *pixel_format =
+	[[NSOpenGLPixelFormat alloc] initWithAttributes:attrs.constData()];
+    if (!pixel_format)
+    {
+	// SideFX.
+        // It's possible that the Mac system does not like undocumented
+        // 400 GL_MAX_TEXTURE_IMAGE_UNITS attribute so try creating
+        // the pixel format again without the attribute.
+        attrs.removeLast();
+        attrs.removeLast();
+        attrs << 0;
+
+        pixel_format =
+            [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs.constData()];
+    }
+
+    return pixel_format;
 }
 
 /*!
