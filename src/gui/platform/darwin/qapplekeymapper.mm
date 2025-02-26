@@ -593,6 +593,68 @@ QList<int> QAppleKeyMapper::possibleKeys(const QKeyEvent *event) const
     return ret;
 }
 
+// SIDEFX
+//  Utility method for coverting a virtual key code and a set of modifiers
+//  into a string of unicode characters.
+//
+//  This is used as a fallback for OSX versions prior to 10.15, and could
+//  probably be made more efficient.
+QString QAppleKeyMapper::sidefxLookupKeyString(
+                                unsigned short macVirtualKey,
+                                Qt::KeyboardModifiers modifiers)
+{
+    // This call will only update the layout info if it detects a change in
+    // the input source, but when it does, it also calls deleteLayouts() to
+    // clear out a 256 entry cache maintained for the possibleKeys() method.
+    // This deleteLayouts() call is a loop through a 256 entry table, doing
+    // nothing in the best case.
+    updateKeyboard();
+
+    // UCKeyTranslate can return a buffer of up to 255 characters, though it
+    // would be rare to get more than 4.
+    UniCharCount buffer_size = 255;
+    UniChar buffer[255];
+    UniCharCount out_buffer_size = 0;
+
+    const UInt32 keyModifier = ((toCarbonModifiers(modifiers) >> 8) & 0xFF);
+    UInt32 dummy_keyboard_dead = 0;
+    OSStatus err = UCKeyTranslate(
+	m_keyboardLayoutFormat, macVirtualKey, kUCKeyActionDown, keyModifier,
+	m_keyboardKind, 0, &dummy_keyboard_dead, buffer_size, &out_buffer_size,
+	buffer);
+    if (err == noErr && out_buffer_size) {
+        return QString::fromUtf16(buffer, out_buffer_size);
+    }
+
+    return QString();
+}
+
+// SIDEFX
+//  Utility method for mapping the first code point character from the
+//  sidefxLookupKeyString() fallback, the virtual key code, and the set of
+//  modifiers to a Qt::Key value.  Surprisingly also needed for the newer
+//  NS_Event::charactersByApplyingModifiers().
+//
+//  Non-symbol keys are not encoded the same way by sidefxLookupKeyString()
+//  or NS_Event::charactersByApplyingModifiers() as they are by
+//  NS_Event::characters() and NS_Event::charactersIgnoringModifiers(), so
+//  a different mapping is needed.
+int QAppleKeyMapper::sidefxLookupKeyStringCharToQtKey(
+                                                const QChar &ch,
+                                                unsigned short macVirtualKey,
+                                                Qt::KeyboardModifiers modifiers)
+{
+    // TODO: toKeyCode() checks for Qt::ShiftModifier, but the way it's
+    //       called suggests it should be checking for shiftKey >> 8 and
+    //       rightShiftKey >> 8.  We're called with Qt::NoModifier, so it
+    //       should not matter here, but be aware.
+    const UInt32 keyModifier = ((toCarbonModifiers(modifiers) >> 8) & 0xFF);
+    int qtkey = toKeyCode(ch, macVirtualKey, keyModifier);
+    if (qtkey == Qt::Key_unknown)
+        qtkey = ch.unicode();
+
+    return qtkey;
+}
 
 
 #else // iOS

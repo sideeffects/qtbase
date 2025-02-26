@@ -2401,6 +2401,41 @@ void QGuiApplicationPrivate::processWheelEvent(QWindowSystemInterfacePrivate::Wh
 #endif // QT_CONFIG(wheelevent)
 }
 
+// SIDEFX
+// Entry point for Houdini code to set custom key event types.
+extern "C" {
+    Q_GUI_EXPORT
+    void
+    sidefxSetBracketKeyEventTypes(int preEventType, int postEventType)
+    {
+	QGuiApplicationPrivate::sidefxSetBracketKeyEventTypes(
+	    preEventType, postEventType);
+    }
+};
+
+// SIDEFX
+//  Custom event types for the custom key bracket (pre/post) events.  These
+//  are set by the application through a custom platform function available
+//  through QGuiApplication::platformFunction() on supported platforms.
+static int theSideFXPreKeyEventType = QEvent::None;
+static int theSideFXPostKeyEventType = QEvent::None;
+
+void QGuiApplicationPrivate::sidefxSetBracketKeyEventTypes(int preEventType, int postEventType)
+{
+    theSideFXPreKeyEventType = preEventType;
+    theSideFXPostKeyEventType = postEventType;
+}
+
+QEvent::Type QGuiApplicationPrivate::sidefxPreKeyEventType()
+{
+    return static_cast<QEvent::Type>(theSideFXPreKeyEventType);
+}
+
+QEvent::Type QGuiApplicationPrivate::sidefxPostKeyEventType()
+{
+    return static_cast<QEvent::Type>(theSideFXPostKeyEventType);
+}
+
 void QGuiApplicationPrivate::processKeyEvent(QWindowSystemInterfacePrivate::KeyEvent *e)
 {
     QWindow *window = e->window.data();
