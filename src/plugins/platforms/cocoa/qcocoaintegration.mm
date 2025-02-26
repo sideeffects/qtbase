@@ -419,6 +419,22 @@ QPlatformKeyMapper *QCocoaIntegration::keyMapper() const
     return mKeyboardMapper.data();
 }
 
+QString QCocoaIntegration::sidefxLookupKeyString(
+                                unsigned short macVirtualKey,
+                                Qt::KeyboardModifiers modifiers)
+{
+    return mKeyboardMapper->sidefxLookupKeyString(macVirtualKey, modifiers);
+}
+
+int QCocoaIntegration::sidefxLookupKeyStringCharToQtKey(
+                                                const QChar &ch,
+                                                unsigned short macVirtualKey,
+                                                Qt::KeyboardModifiers modifiers)
+{
+    return mKeyboardMapper->sidefxLookupKeyStringCharToQtKey(ch, macVirtualKey,
+                                                             modifiers);
+}
+
 void QCocoaIntegration::setApplicationIcon(const QIcon &icon) const
 {
     // Fall back to a size that looks good on the highest resolution screen available

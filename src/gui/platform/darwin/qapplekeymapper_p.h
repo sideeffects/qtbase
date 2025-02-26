@@ -49,6 +49,31 @@ public:
     static Qt::KeyboardModifiers fromUIKitModifiers(ulong uikitModifiers);
     static ulong toUIKitModifiers(Qt::KeyboardModifiers);
 #endif
+
+
+    // SIDEFX                                   
+    //  Utility method for coverting a virtual key code and a set of modifiers
+    //  into a string of unicode characters.    
+    //
+    //  This is used as a fallback for OSX versions prior to 10.15, and could
+    //  probably be made more efficient.
+    QString sidefxLookupKeyString(unsigned short macVirtualKey,
+                                  Qt::KeyboardModifiers modifiers);
+    // SIDEFX
+    //  Utility method for mapping the first code point character from the
+    //  sidefxLookupKeyString() fallback, the virtual key code, and the set of
+    //  modifiers to a Qt::Key value.  Surprisingly also needed for the newer
+    //  NS_Event::charactersByApplyingModifiers().
+    //                                         
+    //  Non-symbol keys are not encoded the same way by sidefxLookupKeyString()
+    //  or NS_Event::charactersByApplyingModifiers() as they are by
+    //  NS_Event::characters() and NS_Event::charactersIgnoringModifiers(), so
+    //  a different mapping is needed.
+    int sidefxLookupKeyStringCharToQtKey(const QChar &ch,
+                                         unsigned short macVirtualKey,
+                                         Qt::KeyboardModifiers modifiers);
+
+
 private:
 #ifdef Q_OS_MACOS
     static constexpr int kNumModifierCombinations = 16;
