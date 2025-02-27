@@ -1064,7 +1064,7 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
             QWindowSystemInterface::handleExtendedKeyEvent(
                 window, time, preKeyEventType, noModQtcode, noModModifiers,
                 code, noModSym, noModNativeModifiers, noModText, m_isAutoRepeat,
-                /*count(default)*/ 1, /*tryShortcutOverride*/ false);
+                /*count(default)*/ 1);
         }
 
         QWindowSystemInterface::handleExtendedKeyEvent(window, time, type, qtcode, modifiers,
@@ -1075,7 +1075,7 @@ void QXcbKeyboard::handleKeyEvent(xcb_window_t sourceWindow, QEvent::Type type, 
             QWindowSystemInterface::handleExtendedKeyEvent(
                 window, time, postKeyEventType, noModQtcode, noModModifiers,
                 code, noModSym, noModNativeModifiers, noModText, m_isAutoRepeat,
-                /*count(default)*/ 1, /*tryShortcutOverride*/ false);
+                /*count(default)*/ 1);
         }
     }
 }
