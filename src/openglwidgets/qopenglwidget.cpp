@@ -631,7 +631,11 @@ void QOpenGLWidgetPaintDevice::ensureActiveTarget()
 
     if (QOpenGLContext::currentContext() != wd->context)
         d->w->makeCurrent();
-    else
+    // SideFX: If Houdini is already painting, then it is guaranteed that
+    // the correct FBO is bound, which may not be the QOpenGLWidget's FBO.
+    // Therefore, don't try to rebind the QOpenGLWidget's FBO.
+    else if (!d->w->property("sidefx::isPainting").isValid()
+	|| !d->w->property("sidefx::isPainting").toBool())
         wd->fbos[wd->currentTargetBuffer]->bind();
 
 
