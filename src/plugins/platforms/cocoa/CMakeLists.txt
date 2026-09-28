@@ -110,6 +110,5 @@ qt_internal_extend_target(QCocoaIntegrationPlugin CONDITION QT_FEATURE_sessionma
 
 # sidefx -- Add debug symbols to the cocoa plugin upon request.
 if(DEFINED ENV{QT_BUILD_DEBUG_DEVTOOL})
-{
     target_compile_options(QCocoaIntegrationPlugin PRIVATE "-g")
-}
+endif()
