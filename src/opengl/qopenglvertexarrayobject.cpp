@@ -11,6 +11,12 @@
 
 #include <QtOpenGL/QOpenGLVersionFunctionsFactory>
 
+// SideFX.
+#if defined(Q_OS_MACOS)
+#  include <QtCore/qpointer.h>
+#  include <QtGui/qwindow.h>
+#endif
+
 #if !QT_CONFIG(opengles2)
 #  include <QtOpenGL/qopenglfunctions_3_0.h>
 #  include <QtOpenGL/qopenglfunctions_3_2_core.h>
@@ -120,6 +126,11 @@ public:
 
     QOpenGLContext *context;
     QThread *guiThread;
+
+// SideFX.
+#if defined(Q_OS_MACOS)
+    QPointer<QWindow> windowSurface;
+#endif
 };
 
 bool QOpenGLVertexArrayObjectPrivate::create()
@@ -142,6 +153,20 @@ bool QOpenGLVertexArrayObjectPrivate::create()
         return false;
 
     context = ctx;
+
+// SideFX.
+#if defined(Q_OS_MACOS)
+    // Direct-to-window renderers must keep their Cocoa drawable attached
+    // during context-local resource cleanup.  Track its lifetime explicitly;
+    // QOpenGLContext::surface() is not a guarded pointer.
+    if (ctx->property("sidefx::preserveWindowDrawable").toBool()) {
+	QSurface *surface = ctx->surface();
+	if (surface && surface->surfaceClass() == QSurface::Window) {
+	    windowSurface = static_cast<QWindow *>(surface);
+	}
+    }
+#endif
+
     QObject::connect(context, SIGNAL(aboutToBeDestroyed()), q, SLOT(_q_contextAboutToBeDestroyed()));
 
     guiThread = qGuiApp->thread();
@@ -189,6 +214,12 @@ void QOpenGLVertexArrayObjectPrivate::destroy()
     QOpenGLContext *oldContext = nullptr;
     QSurface *oldContextSurface = nullptr;
     QScopedPointer<QOffscreenSurface> offscreenSurface;
+
+// SideFX.
+#if defined(Q_OS_MACOS)
+    QOpenGLContext *windowCleanupContext = nullptr;
+#endif
+
     if (context && context != ctx) {
         oldContext = ctx;
         oldContextSurface = ctx ? ctx->surface() : nullptr;
@@ -202,10 +233,31 @@ void QOpenGLVertexArrayObjectPrivate::destroy()
             // The format may be incompatible and some platforms (iOS) may impose
             // restrictions on using a window with different contexts. Create an
             // offscreen surface (a pbuffer or a hidden window) instead to be safe.
-            offscreenSurface.reset(new QOffscreenSurface);
-            offscreenSurface->setFormat(context->format());
-            offscreenSurface->create();
-            if (context->makeCurrent(offscreenSurface.data())) {
+    
+	    // SideFX.
+	    bool madeCurrent = false;
+#if defined(Q_OS_MACOS)
+	    // Making this context current on an offscreen surface calls
+	    // -[NSOpenGLContext clearDrawable], dropping its visible drawable.
+	    //
+	    // Reuse the same context/window pair that created this VAO instead.
+	    if (windowSurface && windowSurface->handle()) {
+		madeCurrent = context->makeCurrent(windowSurface.data());
+		if (madeCurrent)
+		    windowCleanupContext = context;
+	    }
+#endif
+
+	    // SideFX.
+	    if (!madeCurrent) {
+		offscreenSurface.reset(new QOffscreenSurface);
+		offscreenSurface->setFormat(context->format());
+		offscreenSurface->create();
+
+		madeCurrent = context->makeCurrent(offscreenSurface.data());
+	    }
+
+            if (madeCurrent) {
                 ctx = context;
             } else {
                 qWarning("QOpenGLVertexArrayObject::destroy() failed to make VAO's context current");
@@ -245,6 +297,15 @@ void QOpenGLVertexArrayObjectPrivate::destroy()
         if (!oldContext->makeCurrent(oldContextSurface))
             qWarning("QOpenGLVertexArrayObject::destroy() failed to restore current context");
     }
+// SideFX.
+#if defined(Q_OS_MACOS)
+    else if (windowCleanupContext) {
+	// Restore the no-current-context state without detaching the window.
+	windowCleanupContext->doneCurrent();
+    }
+
+    windowSurface.clear();
+#endif
 }
 
 /*!
