@@ -117,6 +117,15 @@ public:
     bool operator>(const QTaggedIterator &j) { return operator-(j) > 0; }
     bool operator<=(const QTaggedIterator &j) { return !operator>(j); }
 
+#if defined(__APPLE__) && (__clang_major__ >= 20)
+    // SideFX.
+    // Fix for Xcode 26+.
+    decltype(auto) operator[](typename Iterator::difference_type n) const
+    {
+	return *(*this + n);
+    }
+#endif
+
     friend inline QTaggedIterator operator+(qsizetype j, const QTaggedIterator &k) { return k + j; }
 };
 
